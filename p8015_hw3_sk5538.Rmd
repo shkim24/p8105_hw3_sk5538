@@ -4,66 +4,101 @@ author: "Senna"
 date: "2024-10-12"
 output: github_document
 ---
-```{r}
+
+Necessary packages are loaded.
+```{r, message = FALSE}
 library(tidyverse)
 library(lubridate)
+library(patchwork)
 ```
 
-### Problem 1
-```{r}
+## Problem 1
+```{r, message = FALSE }
 library(p8105.datasets)
 p1_df = ny_noaa
 ```
 
-Do some data cleaning. Create separate variables for year, month, and day.  
-Ensure observations for temperature, precipitation, and snowfall are given in reasonable units. For snowfall, what are the most commonly observed values? Why?
+#### Do some data cleaning. Create separate variables for year, month, and day. Ensure observations for temperature, precipitation, and snowfall are given in reasonable units. 
 ```{r}
 p1_df = p1_df|>
   mutate(
     year = year(date),
     month = month(date),
-    day = day(date)
+    day = day(date),
+    tmax = as.numeric(tmax),
+    tmin = as.numeric(tmin)
   )
-
-p1_df <- p1_df|>
-  mutate(
-    tmax = as.integer(tmax),
-    tmin = as.integer(tmin)
-  )
-
 ```
 
-```{r}
-################# idk how to do this wth
-summary(p1_df[["tmax"]])
-summary(p1_df[["tmin"]]) #-40c to 50c
-summary(p1_df[["prcp"]]) # in mm or inches (0-few hundred mm)
-summary(p1_df[["snow"]]) # in cm or inches
+#### Ensure correct units. 
+```{r, message = FALSE}
+summary_list = list(
+  tmax = summary(na.omit(p1_df[["tmax"]])),
+  tmin = summary(na.omit(p1_df[["tmin"]])),
+  prcp = summary(na.omit(p1_df[["prcp"]])),
+  snow = summary(na.omit(p1_df[["snow"]]))
+)
+summary_list
+
+sum(p1_df[["prcp"]] == 0, na.rm = TRUE)
+sum(p1_df[["snow"]] == 0, na.rm = TRUE)
+
+
+# tenths of mm prcp
+# mm snow
+# tenths of degrees C.
 ```
+
+#### For snowfall, what are the most commonly observed values? Why?
 ```{r}
 snow_mode <- p1_df |>
   group_by(snow) |>
   summarize(count = n()) |>
   arrange(desc(count))
 
-
 head(snow_mode,3)
 ```
 
 
-
-Make a two-panel plot showing the average max temperature in January and in July in each station across years. Is there any observable / interpretable structure? Any outliers?
-
-Make a two-panel plot showing (i) tmax vs tmin for the full dataset (note that a scatterplot may not be the best option); and (ii) make a plot showing the distribution of snowfall values greater than 0 and less than 100 separately by year.
-
-
-
-### problem 2
-
-
-Load, tidy, merge, and otherwise organize the data sets. Your final dataset should include all originally observed variables; exclude participants less than 21 years of age, and those with missing demographic data; and encode data with reasonable variable classes (i.e. not numeric, and using factors with the ordering of tables and plots in mind).
-
+#### Make a two-panel plot showing the average max temperature in January and in July in each station across years. Is there any observable / interpretable structure? Any outliers?
 ```{r}
+p1_df|>
+  filter(month == c(1,7))|>
+  group_by(id, year) |>
+  mutate(
+    tmax = tmax/10,
+    tmin = tmin/10,
+    mean_tmax = mean(tmax, na.rm = TRUE)
+  ) |> 
+  ggplot(aes(x = id, y = mean_tmax, color = year)) + 
+  geom_point(aes(group = year), alpha = 0.5) +
+  facet_grid(~month) +
+  labs(
+    title = "Mean Maximum Temperature Across Stations in January and July",
+    x = "Station",
+    y = "Mean Maximum Temperature (C)"
+) +
+  theme_minimal()
+```
+
+#### Make a two-panel plot showing (i) tmax vs tmin for the full dataset (note that a scatterplot may not be the best option); and (ii) make a plot showing the distribution of snowfall values greater than 0 and less than 100 separately by year.
+```{r}
+p1_df |> 
+  filter(snow > 0, snow < 100) |> 
+  ggplot(aes(x = snow, y = factor(year))) +
+  geom_density_ridges() +
+  labs(
+    title = "Disribution of snow by year"
+  )
+```
+
+
+
+## problem 2
+
+#### Load, tidy, merge, and otherwise organize the data sets. Your final dataset should include all originally observed variables; exclude participants less than 21 years of age, and those with missing demographic data; and encode data with reasonable variable classes (i.e. not numeric, and using factors with the ordering of tables and plots in mind).
+
+```{r, message = FALSE}
 accel_df = read_csv(file = "./nhanes_accel.csv")|>
   janitor::clean_names()
 
@@ -75,16 +110,14 @@ demo_df = read_csv(file = "./nhanes_covar.csv", skip=4)|>
     education = factor(education),
     sex = recode(sex,
                  '1'= 'M',
-                 '2' = 'F'))
+                 '2' = 'F'),
+    sex = factor(sex, levels = c("male", "female")))
 
-#sex: binary??????????????? 
-
-
-p2_df = full_join(demo_df, accel_df, by='seqn')
+p2_df = left_join(demo_df, accel_df, by='seqn')
 ```
 
 
-Produce a reader-friendly table for the number of men and women in each education category, 
+#### Produce a reader-friendly table for the number of men and women in each education category, 
 ```{r}
 education_table = p2_df|>
   group_by (education, sex)|>
@@ -101,29 +134,43 @@ education_table = p2_df|>
       '3' = 'more than high school'
     )
   )|>
-  arrange(education)
+  arrange(education)|>
+  knitr::kable(
+    caption = "Number of men and women in each education category"
+  ) 
 
 education_table
 ```
+The male to female ratio of participants for 'less than high school' and 'more than high school' were near 1:1, while that of 'high school equivalent' group was 1.5:1. Moreover, the 'more than high school' group had the most number of participants (115), followed by 'high school equiavalent' (58), and 'less than high school' (55). Due to the differences, some measures such as total activity needs close inspection.  
 
-and create a visualization of the age distributions for men and women in each education category. Comment on these items.
+
+#### and create a visualization of the age distributions for men and women in each education category. Comment on these items.
 ```{r}
-age_distribution_plot <- ggplot(p2_df, aes(x = education, y = age, fill = sex)) +
-  geom_boxplot(position = position_dodge(0.8)) +
-  labs(title = "Age Distributions by Education Category and Sex",
-       x = "Education Category",
-       y = "Age",
-       fill = "Sex") +
+
+p2_df |> 
+  ggplot(aes(x = age, fill = sex)) + 
+  geom_density(alpha = 0.5) +
+  facet_grid(. ~ education, labeller = as_labeller(c(
+    '1' = 'Less than high school',
+    '2' = 'High school equivalent',
+    '3' = 'More than high school'
+  ))) +
+  labs(
+    title = "Age Distribution by Sex and Education",
+    x = "Age",
+    y = "Density"
+  ) +
   theme_minimal()
-
-# Display the plot
-print(age_distribution_plot)
 ```
+Among participants with less than high school education, the age distribution of males has two peaks around 40-50 and 70-80, while that of female has one peak around 70. There is a higher proportion of older ages than younger ages in both males and females. 
+
+Among participants with high school equivalent education, the ages distribution of males has two peaks around 30 and 60, while that of females has one peak around 70. The proportion of women is noticeably higher in older ages, while that of males is more relatively evenly distributed especially in ages 20-60.
+
+Among participants with more than high school education, the age distributions of both male and female are both strongly skewed to the right. The proportion of femaels of ages 30-40 is noticeably high compared to other ages. 
 
 
-
-total activity over the day : aggregate across minutes to create a total activity variable for each participant. Plot these total activities (y-axis) against age (x-axis); your plot should compare men to women and have separate panels for each education level. Include a trend line or a smooth to illustrate differences. Comment on your plot.
-```{r}
+#### total activity over the day : aggregate across minutes to create a total activity variable for each participant. Plot these total activities (y-axis) against age (x-axis); your plot should compare men to women and have separate panels for each education level. Include a trend line or a smooth to illustrate differences. Comment on your plot.
+```{r, warning = FALSE}
 
 min1_index = which (colnames(p2_df)== 'min1')
 last_column_index <- ncol(p2_df)
@@ -153,9 +200,16 @@ total_activity|>
   theme_minimal() +
   theme(legend.position = "right")
 ```
+For groups less than high school and more than high school, both male and female show an overall decrease in total activity as age increases.  
+
+In less than high school group, the decrease in total activity is sharper than the more than high school group, and the total activity between males and females is not significantly different. There is a slight increase in total activity in both male and female in around age 60, and the increase is males is greater. The total activity decreases again past age 60 for both sex. Since the age distribution was greater in older ages for both sex and there is approximately a 1:1 ratio of sex, the rate of decrease in total activity in older ages can be considered an underestimation (in total population). 
+
+In higher than high school group, there is a mild decrease in total activity with age, with the total activity of females being being greater than that of males. Since the age distribution was greater in younger ages for both sex and there is approximately a 1:1 ratio of sex, the rate of decrease in total activity in age can be considered an overestimation. 
+
+For high school equivalent group, the total activity for both male and female increases until around age 40, then decreases. Given that the number of male participants was 1.5 times that of female participants, there can be a greater difference of total activity between the two sex in this education group in the total population.  
 
 
-inspection of activity over the course of the day. Make a three-panel plot that shows the 24-hour activity time courses for each education level and use color to indicate sex. Describe in words any patterns or conclusions you can make based on this graph; including smooth trends may help identify differences.
+#### inspection of activity over the course of the day. Make a three-panel plot that shows the 24-hour activity time courses for each education level and use color to indicate sex. Describe in words any patterns or conclusions you can make based on this graph; including smooth trends may help identify differences.
 
 ```{r}
 activity_long_df <- p2_df|>
@@ -170,6 +224,7 @@ activity_long_df <- p2_df|>
 
 
 ggplot(activity_long_df, aes(x = minute, y = activity, color = as.factor(sex))) +
+  geom_line(alpha=0.15)+
   geom_smooth( se = FALSE) + # Smooth trend line
   facet_wrap(~ education, labeller = as_labeller(c(
     '1' = 'Less than high school',
@@ -189,16 +244,149 @@ ggplot(activity_long_df, aes(x = minute, y = activity, color = as.factor(sex))) 
 
 
 
-### Problem 3
+## Problem 3
+
+####  Import, clean, and tidy these data, and describe the resulting dataset.
+```{r, message= FALSE}
+citibike_jan20 <- read_csv(file = "./citibike/Jan 2020 Citi.csv") |> 
+  janitor::clean_names() |> 
+  mutate(date = "Jan 2020")
+
+citibike_jan24 <- read_csv(file = "./citibike/Jan 2024 Citi.csv") |> 
+  janitor::clean_names() |> 
+  mutate(date = "Jan 2024")
+
+citibike_jul20 <- read_csv(file = "./citibike/July 2020 Citi.csv") |> 
+  janitor::clean_names() |> 
+  mutate(date = "Jul 2020")
+
+citibike_jul24 <- read_csv(file = "./citibike/July 2024 Citi.csv") |> 
+  janitor::clean_names() |> 
+  mutate(date = "Jul 2024")
+
+citibike_df = bind_rows(citibike_jan20, citibike_jan24, citibike_jul20, citibike_jul24)
+```
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!The joined dataset includes information on 1% of all rides with a total duration less than 4 hours in each of four months (January 2020, July 2020, January 2024 and July 2024). The variables in this dataset are ride IDs, types of ride, days of the week that the bikes were rented on, duration of rental (in minutes), pickup and drop off locations, and types of membership (Citi Bike member or casual). There are `r ncol(citi_df)` variables and `r nrow(citi_df)` observations. 
 
 
+Produce a reader-friendly table showing the total number of rides in each combination of year and month separating casual riders and Citi Bike members. Comment on these results.
+```{r}
+citibike_df |>
+  group_by(date, member_casual) |> 
+  summarise(total_rides = n()) |> 
+  pivot_wider(names_from = member_casual, values_from = total_rides, values_fill = 0)
+
+```
+
+Make a table showing the 5 most popular starting stations for July 2024; include the number of rides originating from these stations.
+```{r}
+citibike_df |>
+  filter(date == "Jul 2024") |>
+  group_by(start_station_name) |>
+  summarise(number_of_rides = n()) |>
+  arrange(desc(number_of_rides)) |>
+  slice_head(n = 5)
+
+```
+
+Make a plot to investigate the effects of day of the week, month, and year on median ride duration. This plot can include one or more panels, but should facilitate comparison across all variables of interest. Comment on your observations from this plot.
 
 
+```{r}
+citibike_df |> 
+  group_by(weekdays, month, year) |> 
+  summarize(
+    median_duration = median(duration, na.rm = TRUE),
+    .group = "drop"
+  ) |> 
+  mutate(
+    weekdays = factor(weekdays, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+  ) |> 
+  ggplot(aes(x = weekdays, y = median_duration, group = year, color = month)) +
+  geom_line(size = 1) +  
+  facet_grid(year ~ month) +
+  labs(
+    title = "Median Bike Rental Duration by Weekday across January and July of 2020 and 2024", 
+    x = "Weekdays", 
+    y = "Median Duration",
+    caption = "Median Bike Rental Duration by Weekday across January and July of 2020 and 2024") +
+  theme_minimal()
+```
+
+```{r}
+
+citibike_df<- citibike_df |> 
+  mutate(
+    # Append "01" as the day and convert to Date format
+    date = as.Date(paste("01", date), format = "%d %b %Y"),
+    year = format(date, "%Y"),  # Extract year
+    month = format(date, "%b")  # Extract month as abbreviated name
+  )
+
+# 1. Plot: Effect of day of the week on median ride duration
+plot_day_of_week <- citibike_df |> 
+  group_by(weekdays) |> 
+  summarise(median_duration = median(duration, na.rm = TRUE)) |> 
+  ggplot(aes(x = weekdays, y = median_duration)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Effect of Day of the Week on Median Ride Duration",
+       x = "Day of the Week",
+       y = "Median Ride Duration (seconds)") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Hide legend for this plot
 
 
+# 2. Plot: Effect of month on median ride duration
+plot_month <- citibike_df |> 
+  group_by(month) |> 
+  summarise(median_duration = median(duration, na.rm = TRUE)) |> 
+  ggplot(aes(x = month, y = median_duration, fill = month)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Effect of Month on Median Ride Duration",
+       x = "Month",
+       y = "Median Ride Duration (seconds)") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Hide legend for this plot
 
+# 3. Plot: Effect of year on median ride duration
+plot_year <- citibike_df |> 
+  group_by(year) |> 
+  summarise(median_duration = median(duration, na.rm = TRUE)) |> 
+  ggplot(aes(x = year, y = median_duration, fill = year)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Effect of Year on Median Ride Duration",
+       x = "Year",
+       y = "Median Ride Duration (seconds)") +
+  theme_minimal() +
+  theme(legend.position = "none")  # Hide legend for this plot
 
+# Combine the three plots into a panel
+combined_plot <- plot_day_of_week + plot_month + plot_year + 
+  plot_layout(ncol = 1)  # Arrange the plots in one column
 
+# Display the combined plot
+print(combined_plot)
+```
+
+There were relatively few electric Citi Bikes in 2020, but many more are available now. For data in 2024, make a figure that shows the impact of month, membership status, and bike type on the distribution of ride duration. Comment on your results
+```{r}
+citibike_2024 = citibike_df|>
+  filter( year == 2024)
+
+ride_duration_plot <- citibike_2024 |> 
+  ggplot(aes(x = month, y = duration, fill = member_casual)) + 
+  geom_boxplot(position = position_dodge(0.8)) +
+  facet_grid(rideable_type ~ member_casual) +  # Panels for bike type and membership
+  scale_y_log10() +  # Log scale to handle any large outliers in ride duration
+  labs(title = "Impact of Month, Membership Status, and Bike Type on Ride Duration (2024)",
+       x = "Month",
+       y = "Ride Duration (log scale, seconds)",
+       fill = "Membership Status") +
+  theme_minimal()
+
+ride_duration_plot
+```
 
 
 
