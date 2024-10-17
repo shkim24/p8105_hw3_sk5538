@@ -22,17 +22,15 @@ p1_df = ny_noaa
 ###### Do some data cleaning. Create separate variables for year, month, and day. Ensure observations for temperature, precipitation, and snowfall are given in reasonable units. 
 ```{r}
 p1_df = p1_df|>
+   separate(date, into = c("year", "month", "day"), sep = "-")|>
   mutate(
-    year = year(date),
-    month = month(date),
-    day = day(date),
-    tmax = as.numeric(tmax),
-    tmin = as.numeric(tmin)
+    tmax = (as.numeric(tmax))/10,
+    tmin = (as.numeric(tmin))/10
   )
 ```
 
 ###### Ensure correct units. 
-```{r, message = FALSE}
+```{r, echo = TRUE, results = 'hide'}
 summary_list = list(
   tmax = summary(na.omit(p1_df[["tmax"]])),
   tmin = summary(na.omit(p1_df[["tmin"]])),
@@ -40,10 +38,6 @@ summary_list = list(
   snow = summary(na.omit(p1_df[["snow"]]))
 )
 summary_list
-
-sum(p1_df[["prcp"]] == 0, na.rm = TRUE)
-sum(p1_df[["snow"]] == 0, na.rm = TRUE)
-
 ```
 
 ###### For snowfall, what are the most commonly observed values? Why?
@@ -55,38 +49,46 @@ snow_mode <- p1_df |>
 
 head(snow_mode,5)
 ```
-The most commonly observed value was 0 since it is common for most days to not have any snow. 
+The most commonly observed value was 0 since it is common for most days to not have any snow. Followed by 0s and NA's, the most common values were 25, 13, and 51, in that order. 
 
 ###### Make a two-panel plot showing the average max temperature in January and in July in each station across years. Is there any observable / interpretable structure? Any outliers?
 ```{r}
-p1_df|>
-  filter(month == c(1,7))|>
-  group_by(id, year) |>
+p1_df |> 
+  filter(month == c("01", "07")) |>
+  drop_na(tmax, tmin) |>
+  group_by(id, month, year) |> 
   mutate(
-    tmax = tmax/10,
-    tmin = tmin/10,
     mean_tmax = mean(tmax, na.rm = TRUE)
   ) |> 
   ggplot(aes(x = id, y = mean_tmax, color = year)) + 
   geom_point(aes(group = year), alpha = 0.5) +
   facet_grid(~month) +
   labs(
-    title = "Mean Maximum Temperature Across Stations in January and July",
-    x = "Station",
+    title = "Mean Maximum Temperature in January and July",
+    x = "Station ID",
     y = "Mean Maximum Temperature (C)"
 ) +
   theme_minimal()
+ 
 ```
+The mean maximum temperature of January clusteredd around a lower range (-10C to 10C) compared to that of July (15C-35C). There were a few stations that observed a warmer maximum temperatures in January, and colder maximum temperatures in July. 
+
 
 ###### Make a two-panel plot showing (i) tmax vs tmin for the full dataset (note that a scatterplot may not be the best option); and (ii) make a plot showing the distribution of snowfall values greater than 0 and less than 100 separately by year.
 ```{r}
-p1_df |> 
+tmax_tmin = p1_df |> 
+  ggplot(aes(x = tmin, y = tmax)) +
+  geom_hex()
+
+snow_dist = p1_df |> 
   filter(snow > 0, snow < 100) |> 
   ggplot(aes(x = snow, y = factor(year))) +
   geom_density_ridges() +
   labs(
     title = "Disribution of snow by year"
   )
+
+tmax_tmin + snow_dist
 ```
 
 
@@ -276,9 +278,14 @@ The resulting dataset has information on 1% of all citi bike rides in January 20
 citibike_df |>
   group_by(date, member_casual) |> 
   summarise(total_rides = n()) |> 
-  pivot_wider(names_from = member_casual, values_from = total_rides, values_fill = 0)
+  pivot_wider(names_from = member_casual, values_from = total_rides, values_fill = 0)|>
+  knitr::kable(
+    caption = "member type by combination of year and month"
+  ) 
 
 ```
+There are more member riders than casual riders in all of the dates provided, despite a substantial increase in the number of casual riders from January 2020 to July 2024. From July 2024 to January 2020, number of casual riders decreased, while that of members increased. However, the total number of riders increased from January 2020 to 2024. July 2024 had the most number of both casual and member rides, likely due to warmer weather. 
+
 
 ###### Make a table showing the 5 most popular starting stations for July 2024; include the number of rides originating from these stations.
 ```{r}
@@ -287,7 +294,10 @@ citibike_df |>
   group_by(start_station_name) |>
   summarise(number_of_rides = n()) |>
   arrange(desc(number_of_rides)) |>
-  slice_head(n = 5)
+  slice_head(n = 5)|>
+  knitr::kable(
+    caption = "number of rides of each start station"
+  ) 
 
 ```
 
